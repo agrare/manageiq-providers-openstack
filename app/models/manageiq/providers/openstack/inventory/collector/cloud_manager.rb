@@ -55,16 +55,6 @@ class ManageIQ::Providers::Openstack::Inventory::Collector::CloudManager < Manag
     @host_aggregates = safe_list { compute_service.aggregates.all }
   end
 
-  def images
-    return [] unless image_service
-    return @images if @images.any?
-    @images = if openstack_admin?
-                image_service.images_with_pagination_loop
-              else
-                image_service.handled_list(:images)
-              end
-  end
-
   def key_pairs
     return @key_pairs if @key_pairs.any?
     @key_pairs = compute_service.handled_list(:key_pairs, {}, openstack_admin?)

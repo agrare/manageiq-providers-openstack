@@ -1,14 +1,15 @@
 class ManageIQ::Providers::Openstack::Inventory::Parser::CloudManager < ManageIQ::Providers::Openstack::Inventory::Parser
   include ManageIQ::Providers::Openstack::RefreshParserCommon::HelperMethods
   include ManageIQ::Providers::Openstack::RefreshParserCommon::Images
+  include ManageIQ::Providers::Openstack::Inventory::Parser::CommonMethods
 
   def parse
     availability_zones
     cloud_services
     flavors
-    miq_templates
+    miq_templates("ManageIQ::Providers::Openstack::CloudManager::Template")
     key_pairs
-    orchestration_stacks
+    orchestration_stacks("ManageIQ::Providers::Openstack::CloudManager::OrchestrationStack")
     quotas
     vms
     cloud_tenants
@@ -84,21 +85,6 @@ class ManageIQ::Providers::Openstack::Inventory::Parser::CloudManager < ManageIQ
       cloud_service.host = host
       cloud_service.system_service = system_service
       cloud_service.availability_zone = persister.availability_zones.lazy_find(s.zone)
-    end
-  end
-
-  def cloud_tenants
-    collector.tenants.each do |t|
-      tenant = persister.cloud_tenants.find_or_build(t.id)
-      tenant.name = t.name
-      tenant.description = t.description
-      tenant.enabled = t.enabled
-      tenant.ems_ref = t.id
-      tenant.parent = if t.try(:parent_id).blank?
-                        nil
-                      else
-                        persister.cloud_tenants.lazy_find(t.try(:parent_id))
-                      end
     end
   end
 
@@ -498,59 +484,13 @@ class ManageIQ::Providers::Openstack::Inventory::Parser::CloudManager < ManageIQ
     disk
   end
 
-  # Compose an ems_ref combining some existing keys
-  def compose_ems_ref(*keys)
-    keys.join('_')
-  end
-
-  # Identify whether the given image is publicly available
-  def public_image?(image)
-    # Glance v1
-    return image.is_public if image.respond_to?(:is_public)
-    # Glance v2
-    image.visibility != 'private' if image.respond_to?(:visibility)
-  end
-
-  # Identify whether the given image has a 32 or 64 bit architecture
-  def image_architecture(image)
-    architecture = image.properties.try(:[], 'architecture') || image.attributes['architecture']
-    return nil if architecture.blank?
-    # Just simple name to bits, x86_64 will be the most used, we should probably support displaying of
-    # architecture name
-    architecture.include?("64") ? 64 : 32
-  end
-
-  # Identify the id of the parent of this image.
-  def parse_image_parent_id(image)
-    if collector.image_service.name == :glance
-      # What version of openstack is this glance v1 on some old openstack version?
-      return image.copy_from["id"] if image.respond_to?(:copy_from) && image.copy_from
-      # Glance V2
-      return image.instance_uuid if image.respond_to?(:instance_uuid)
-      # Glance V1
-      image.properties.try(:[], 'instance_uuid')
-    elsif image.server
-      # Probably nova images?
-      image.server["id"]
+  def find_resource(uid, stack_id)
+    # in some cases, a stack resource may refer to a physical resource
+    # that doesn't exist. check that the physical resource actually exists
+    # so that find_or_build doesn't produce an "empty" vm.
+    if collector.vms_by_id.key?(uid)
+      s = persister.vms.find_or_build(uid)
+      s.orchestration_stack = persister.orchestration_stacks.lazy_find(stack_id)
     end
-  end
-
-  def image_tenants(image)
-    tenants = []
-    if public_image?(image)
-      # For public image we will fill a relation to all tenants,
-      # since calling the members api for a public image throws a 403.
-      collector.tenants.each do |t|
-        tenants << persister.cloud_tenants.lazy_find(t.id)
-      end
-    else
-      # Add owner of the image
-      tenants << persister.cloud_tenants.lazy_find(image.owner) if image.owner
-      # TODO: Glance v2 doesn't support members for "private" images, implement `members` for "shared" images later
-      if image.respond_to?(:is_public) && (members = image.members).any?
-        tenants += members.map { |x| persister.cloud_tenants.lazy_find(x['member_id']) }
-      end
-    end
-    tenants
   end
 end
