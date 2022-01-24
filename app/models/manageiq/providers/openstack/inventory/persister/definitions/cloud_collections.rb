@@ -64,7 +64,7 @@ module ManageIQ::Providers::Openstack::Inventory::Persister::Definitions::CloudC
   end
 
   def add_auth_key_pairs(extra_properties = {})
-    add_collection(cloud, :auth_key_pairs, extra_properties) do |builder|
+    add_cloud_collection(:auth_key_pairs, extra_properties) do |builder|
       # targeted refresh workaround-- always refresh the whole keypair collection
       # regardless of whether this is a TargetCollection or not
       # because OpenStack doesn't give us UUIDs of changed keypairs,
@@ -75,7 +75,7 @@ module ManageIQ::Providers::Openstack::Inventory::Persister::Definitions::CloudC
   end
 
   def add_vm_and_template_labels
-    add_collection(cloud, :vm_and_template_labels) do |builder|
+    add_cloud_collection(:vm_and_template_labels) do |builder|
       builder.add_targeted_arel(
         lambda do |inventory_collection|
           manager_uuids = inventory_collection.parent_inventory_collections.collect(&:manager_uuids).map(&:to_a).flatten
