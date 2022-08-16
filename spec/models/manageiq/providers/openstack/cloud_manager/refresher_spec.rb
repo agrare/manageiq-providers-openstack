@@ -23,7 +23,12 @@ describe ManageIQ::Providers::Openstack::CloudManager::Refresher do
   it "will perform a full refresh" do
     inventory = nil
     2.times do # Run twice to verify that a second run with existing data does not change anything
-      with_vcr { @ems.refresh }
+      with_vcr do
+        @ems.refresh
+        @ems.network_manager.refresh
+        @ems.cinder_manager.refresh
+        @ems.swift_manager&.refresh
+      end
       inventory ? assert_inventory_not_changed { inventory } : inventory = serialize_inventory
       @ems.reload
 
@@ -68,7 +73,7 @@ describe ManageIQ::Providers::Openstack::CloudManager::Refresher do
   def assert_specific_cloud_network
     cn = @ems.cloud_networks.find_by(:name => "test-network")
     expect(cn.name).to eq("test-network")
-    expect(cn.type).to eq("ManageIQ::Providers::Openstack::NetworkManager::CloudNetwork")
+    expect(cn.type).to eq("ManageIQ::Providers::Openstack::NetworkManager::CloudNetwork::Private")
   end
 
   def assert_specific_cloud_subnet
